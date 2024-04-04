@@ -1,9 +1,8 @@
 
-/librarian/venv
-/librarian/src/eg_vault
-/librarian/src/config.ini
-/frontend/blazor/appsettings.json
-/frontend/blazor/appsettings.Development.json
+/venv
+/src/eg_vault
+/src/empty_vault
+/src/config.ini
 
 # Byte-compiled / optimized / DLL files
 __pycache__/

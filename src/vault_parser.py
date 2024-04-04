@@ -124,3 +124,14 @@ class VaultParser:
             linked_note = self.session.query(Notes).filter_by(name=link_name).first()
             if linked_note:
                 note.linked_notes.append(linked_note)
+
+
+## Usage
+# from vault_parser import VaultParser
+# from openai import OpenAI
+#
+# client = OpenAI()
+# vault_path = "/path/to/vault"
+# parser = VaultParser(vault_path, client)
+# parser.parse_vault()
+                
