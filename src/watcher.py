@@ -57,6 +57,10 @@ class Handler(FileSystemEventHandler):
             return
         
         src_path = Path(event.src_path)
+        root_path = src_path.parent.parent 
+        embedding_path = root_path / 'Embeddings'
+        index_path = root_path / 'Index'
+
         if '/rename' in contents:
             filename = self.rename_file(contents) + '.md'
             print(filename)
@@ -70,9 +74,6 @@ class Handler(FileSystemEventHandler):
             # if it does then rename to the same as the file
 
         if '/aggr-tags' in contents:
-            root_path = src_path.parent.parent 
-            index_path = root_path / 'Index'
-            embedding_path = root_path / 'Embeddings'
             tags_note = index_path / 'Tags.md'
             embedding_note = embedding_path / 'Tags.json'
             img_path = root_path / 'Media' / 'tag_similarity_heatmap.png'
@@ -106,28 +107,56 @@ class Handler(FileSystemEventHandler):
         if '/rewrite' in contents:
             pass
 
-        if '/c-tags' in contents:
-            tags = self.create_tags(contents, 3)
+        if re.search(r'/c-tags-\d+', contents):
+            match = re.search(r'/c-tags-(\d+)', contents)
+            num_tags = int(match.group(1))
+            tags = self.create_tags(contents, num_tags)
             tag_index = contents.find('tags:')
             contents = contents[:tag_index + 6] + tags + contents[tag_index + 6:]
-            self.remove_tag(src_path, contents, '/c-tags')
+            self.remove_tag(src_path, contents, match.group(0))
 
-        if '/c-link' in contents:
-            link = self.create_link(contents)
-            relations_index = contents.find('relations:')
-            contents = contents[:relations_index + 10] + " \"[[" + link + "]]\"" + contents[relations_index + 10:]
-            self.remove_tag(src_path, contents, '/c-link')
-            print(contents)
+        if re.search(r'/c-links-\d+', contents):
+            match = re.search(r'/c-links-(\d+)', contents)
+            num_links = int(match.group(1))
+
+            all_embeddings =  self.load_embeddings(EMBEDDING_DIRECTORY)
+            if src_path.name in [embed_path.name for embed_path in embedding_path.rglob('*.md')]:
+                embedding = all_embeddings[src_path.stem]
+                del all_embeddings[src_path.stem]
+            else:
+                embedding = self.embed(contents)
+            
+            links = []
+            for _ in range(num_links):
+                best_link = self.create_link(embedding, all_embeddings)
+                del all_embeddings[best_link]
+                formatted_best_link = '[[' + best_link + ']]'
+                links.append(formatted_best_link)
+
+            self.remove_tag(src_path, contents, match.group(0))
+            
+            print(links)
+            print(src_path)
+            with open(src_path, 'a+') as f:
+                for i, link in enumerate(links):
+                    line = f'{i+1}: {link}\n'
+                    print(line)
+                    f.write(line)
+
+           
 
         if '/embed' in contents:
-            embedding = self.embed(contents)
-            with open(EMBEDDING_DIRECTORY / src_path.name, 'w') as f:
-                f.write(', '.join(str(x) for x in embedding))
-            self.remove_tag(src_path, contents, '/embed')
+            self.create_embedding_file(src_path, contents)
             
-        if '/all-embed':
-            pass
+        if '/all-embed' in contents:
+            self.remove_tag(src_path, contents, 'all-embed')
+            for file in src_path.parent.rglob('*.md'):
+                src_path = file
+                with open(file, 'r') as f:
+                    contents = f.read()
+                self.create_embedding_file(src_path, contents)
 
+            
     def remove_tag(self, path, contents, tag) -> None:
         with open(path, "w") as f:
             f.write(contents.replace(tag, ''))
@@ -160,14 +189,13 @@ class Handler(FileSystemEventHandler):
 
         return response.choices[0].message.content
 
-    def create_link(self, contents) -> str:
-        print("Creating links...")
-        content_embeddings = self.embed(contents)
-        all_embeddings =  self.load_embeddings(EMBEDDING_DIRECTORY)
 
+    def create_link(self, embedding: float, all_embeddings: dict[str, float]) -> str:
+        print("Creating links...")
         max_similarity = 0
+        
         for key, value in all_embeddings.items():
-            similarity = self.calc_cosine_similarity(content_embeddings, value)
+            similarity = self.calc_cosine_similarity(embedding, value)
             print(f"Similarity between content and {key}: {similarity}")
             if similarity > max_similarity:
                 max_similarity = similarity
@@ -184,16 +212,28 @@ class Handler(FileSystemEventHandler):
 
         return response.data[0].embedding
 
-    def load_embeddings(self, directory):
+    def create_embedding_file(self, src_path: Path, contents: str) -> None:
+        embedding = self.embed(contents)
+        with open(EMBEDDING_DIRECTORY / src_path.name, 'w') as f:
+            f.write(', '.join(str(x) for x in embedding))
+        self.remove_tag(src_path, contents, '/embed')
+
+    @staticmethod
+    def embedding_str2float(file_path: Path) -> float:
+        with open(file_path, 'r') as file:
+            content = file.read().strip()
+            embedding = [float(x) for x in content.split(',')]
+
+        return embedding
+
+    def load_embeddings(self, directory: str) -> dict:
         embedding_dict = {}
-        for file_name in os.listdir(directory):
+        for file_name in Path(directory).rglob('*.md'):
             file_path = os.path.join(directory, file_name)
             if os.path.isfile(file_path):
-                with open(file_path, 'r') as file:
-                    content = file.read().strip()
-                    embedding = [float(x) for x in content.split(',')]
-                    key = Path(file_name).stem
-                    embedding_dict[key] = embedding
+                embedding = self.embedding_str2float(file_path)
+                key = Path(file_name).stem
+                embedding_dict[key] = embedding
 
         return embedding_dict
     
