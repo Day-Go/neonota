@@ -51,7 +51,7 @@ class Handler(FileSystemEventHandler):
 
     def process_modified(self, event):
         if not event.is_directory:
-            with open(event.src_path, "r") as f:
+            with open(event.src_path, 'r', encoding='utf-8', errors='ignore') as f:
                 contents = f.read()
         elif event.is_directory:
             return
@@ -73,6 +73,9 @@ class Handler(FileSystemEventHandler):
             # Check if an embedding exists
             # if it does then rename to the same as the file
 
+        if '/rewrite' in contents:
+            pass
+
         if '/aggr-tags' in contents:
             tags_note = index_path / 'Tags.md'
             embedding_note = embedding_path / 'Tags.json'
@@ -81,9 +84,9 @@ class Handler(FileSystemEventHandler):
             # TODO: Don't embed tags that already have embeddings
 
             tags = self.get_all_tags(src_path.parent)
+            print(tags)
             with open(tags_note, 'w+') as f:
                 f.write('![[tag_similarity_heatmap.png]]')
-
                 f.write('\n - '.join(tags)) 
 
             tags = [tag.replace('_', ' ') for tag in tags]
@@ -103,9 +106,6 @@ class Handler(FileSystemEventHandler):
             plt.close(fig)
 
             self.remove_tag(src_path, contents, '/aggr-tags')
-
-        if '/rewrite' in contents:
-            pass
 
         if re.search(r'/c-tags-\d+', contents):
             match = re.search(r'/c-tags-(\d+)', contents)
@@ -143,8 +143,6 @@ class Handler(FileSystemEventHandler):
                     print(line)
                     f.write(line)
 
-           
-
         if '/embed' in contents:
             self.create_embedding_file(src_path, contents)
             
@@ -152,13 +150,14 @@ class Handler(FileSystemEventHandler):
             self.remove_tag(src_path, contents, 'all-embed')
             for file in src_path.parent.rglob('*.md'):
                 src_path = file
-                with open(file, 'r') as f:
+                with open(file, 'r', encoding='utf-8') as f:
                     contents = f.read()
                 self.create_embedding_file(src_path, contents)
 
-            
+            self.remove_tag(src_path, contents, '/all-embed')
+       
     def remove_tag(self, path, contents, tag) -> None:
-        with open(path, "w") as f:
+        with open(path, "w", encoding='utf-8') as f:
             f.write(contents.replace(tag, ''))
     
     def rename_file(self, contents: str) -> str:
@@ -188,7 +187,6 @@ class Handler(FileSystemEventHandler):
         )
 
         return response.choices[0].message.content
-
 
     def create_link(self, embedding: float, all_embeddings: dict[str, float]) -> str:
         print("Creating links...")
@@ -243,7 +241,8 @@ class Handler(FileSystemEventHandler):
     def get_all_tags(self, root_folder):
         all_tags = []
         for file_path in Path(root_folder).rglob('*.md'):
-            with file_path.open() as file:
+            print(file_path)
+            with open(file_path, 'r', encoding='utf-8') as file:
                 file_content = file.read()
                 tags = self.extract_tags(file_content)
                 all_tags.extend(tags)
@@ -252,16 +251,16 @@ class Handler(FileSystemEventHandler):
     @staticmethod
     def extract_tags(file_content):
         tags = []
-        tag_block = re.search(r'tags:\s*(.*?)\s*relations:', file_content, re.DOTALL)
+        tag_block = re.findall(r'tags:\s*\n([\s\S]*?)\n---', file_content)
         if tag_block:
-            tag_content = tag_block.group(1).strip()
-            tag_lines = tag_content.split('\n')
-            for line in tag_lines:
-                tag = line.strip().lstrip('- ')
-                if tag:
-                    tags.append(tag)
+            for block in tag_block:
+                tag_lines = block.strip().split('\n')
+                for line in tag_lines:
+                    tag = line.strip().lstrip('- ')
+                    if tag:
+                        tags.append(tag)
         return tags
-    
+        
     def generate_similarity_matrix(self, tag_embeddings: dict):
         n = len(tag_embeddings)
         similarity_matrix = np.zeros((n, n))
