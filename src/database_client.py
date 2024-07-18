@@ -23,15 +23,15 @@ class DbClient:
 
     def get_all_notes(self):
         with self.session_scope() as session:
-            return session.query(Note).all()
+            return list(session.query(Note).all())
 
     def get_all_titles(self):
         with self.session_scope() as session:
-            return session.scalars(select(Note.title)).all()
+            return list(session.scalars(select(Note.title)).all())
 
     def get_all_filepaths(self):
         with self.session_scope() as session:
-            return session.scalars(select(Note.path)).all()
+            return list(session.scalars(select(Note.path)).all())
 
     # TODO: Add error handling
     def add_note(self, note: Note):
