@@ -7,7 +7,6 @@ from database_client import DbClient
 from watcher import Watcher, NoteHandler
 
 
-
 def run_watcher(event_handler):
     watcher = Watcher(event_handler)
     watcher.run()

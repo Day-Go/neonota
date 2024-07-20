@@ -18,7 +18,7 @@ class NoteHandler(FileSystemEventHandler):
             '.md': 'Markdown',
             '': 'Folder'
         }
-        self.existing_titles = self.db_client.get_all_titles()
+        self.existing_names = self.db_client.get_all_names()
         self.existing_files = self.db_client.get_all_filepaths()
 
     @staticmethod
@@ -58,7 +58,7 @@ class NoteHandler(FileSystemEventHandler):
         with open(path, 'r') as f:
             content = f.read()
         embedding = self.llm_client.embed(content)
-        note.title = path.name
+        note.name = path.name
         note.content = content
         note.embedding = embedding
         self.db_client.upsert_note(note)
@@ -72,7 +72,7 @@ class NoteHandler(FileSystemEventHandler):
             content = f.read()
 
         embedding = self.llm_client.embed(content)
-        note = Note(path=str(path), title=path.name, content=content, embedding=embedding)
+        note = Note(path=str(path), name=path.name, content=content, embedding=embedding)
 
         self.db_client.upsert_note(note)
         self.existing_files.append(str(path))

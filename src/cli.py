@@ -20,6 +20,39 @@ class NoteCLI(cmd.Cmd):
         self.should_run = False
         return True
 
+    # TODO: Add regex mathcing for note names
+    def do_list_notes(self, arg):
+        notes = self.db_client.get_all_names()
+        for note in notes:
+            self.message_queue.put(note)
+
+    def help_list_notes(self):
+        self.message_queue.put('Get a list of all the note names in the database')
+
+    def do_link(self, arg):
+        try:
+            args = arg.split()
+
+            if len(args) != 2:
+                self.message_queue.put('Usage: link <string> <integer>')
+                return
+
+            name = args[0]
+            n = int(args[1])
+
+            note = self.db_client.get_note_by_name(name)
+            if not note:
+                self.message_queue.put(f'Note named {name} not found.')
+
+            similar_notes = self.db_client.get_similar_notes(note.embedding, n)
+            for similar_note in similar_notes:
+                self.message_queue.put(similar_note.name)
+        except:
+            self.message_queue.put('Usage: link <string> <integer>')
+
+    def help_link(self):
+        print('find x most similar notes')
+
     def cmdloop(self, intro=None):
         print(intro)
         while self.should_run:

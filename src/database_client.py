@@ -31,17 +31,31 @@ class DbClient:
                 return session.expunge(result)
             return None
 
+    def get_note_by_name(self, name: str) -> Union[Note, None]:
+        with self.session_scope() as session:
+            if not name.endswith('.md'):
+                name += '.md'
+            stmt = select(Note).where(Note.name == name)
+            result = session.execute(stmt).scalar_one_or_none()
+            if result:
+                return session.expunge(result)
+            return None
+
     def get_all_notes(self):
         with self.session_scope() as session:
             return list(session.query(Note).all())
 
-    def get_all_titles(self):
+    def get_all_names(self):
         with self.session_scope() as session:
-            return list(session.scalars(select(Note.title)).all())
+            return session.scalars(select(Note.name)).all()
 
     def get_all_filepaths(self):
         with self.session_scope() as session:
             return list(session.scalars(select(Note.path)).all())
+
+    def get_notes_by_tag(self, tag_name):
+        with self.session_scope() as session:
+            return session.query(Note).filter(Note.tags.any(Tag.name == tag_name)).all()
 
     def upsert_note(self, note: Note):
         with self.session_scope() as session:
@@ -64,10 +78,6 @@ class DbClient:
                 session.rollback()
                 print(f"Error in upsert_note: {str(e)}")
                 raise
-
-    def get_notes_by_tag(self, tag_name):
-        with self.session_scope() as session:
-            return session.query(Note).filter(Note.tags.any(Tag.name == tag_name)).all()
 
     def add_embedding(self, note_id: int, embedding: List[float]):
         with self.session_scope() as session:

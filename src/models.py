@@ -31,7 +31,8 @@ class Note(Base):
 
     id = Column(Integer, primary_key=True)
     path = Column(String(255))
-    title = Column(String(255))
+    name = Column(String(255))
+    extension = Column(String(32))
     content = Column(Text)
     embedding = Column(Vector(1536))
 
