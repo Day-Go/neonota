@@ -1,5 +1,5 @@
-from typing import Union
-from sqlalchemy import create_engine, select 
+from typing import List, Union
+from sqlalchemy import create_engine, func, select 
 from sqlalchemy.orm import sessionmaker, class_mapper
 from sqlalchemy.dialects.postgresql import insert
 from models import Note, Tag, note_links, note_tags
@@ -68,6 +68,40 @@ class DbClient:
     def get_notes_by_tag(self, tag_name):
         with self.session_scope() as session:
             return session.query(Note).filter(Note.tags.any(Tag.name == tag_name)).all()
+
+    def add_embedding(self, note_id: int, embedding: List[float]):
+        with self.session_scope() as session:
+            note = session.query(Note).filter(Note.id == note_id).first()
+            if note:
+                note.embedding = embedding
+                session.commit()
+            else:
+                raise ValueError(f"Note with id {note_id} not found")
+
+    def get_similar_notes(self, query_embedding: List[float], n: int = 5):
+        with self.session_scope() as session:
+            # Assuming your Note model has an 'embedding' column of type vector
+            results = session.query(Note).order_by(
+                func.cosine_similarity(Note.embedding, query_embedding).desc()
+            ).limit(n).all()
+            return results
+
+    def bulk_add_embeddings(self, note_ids: List[int], embeddings: List[List[float]]):
+        with self.session_scope() as session:
+            for note_id, embedding in zip(note_ids, embeddings):
+                note = session.query(Note).filter(Note.id == note_id).first()
+                if note:
+                    note.embedding = embedding
+            session.commit()
+
+    def delete_note(self, note_id: int):
+        with self.session_scope() as session:
+            note = session.query(Note).filter(Note.id == note_id).first()
+            if note:
+                session.delete(note)
+                session.commit()
+            else:
+                raise ValueError(f"Note with id {note_id} not found")
 
     def close(self):
         self.engine.dispose()

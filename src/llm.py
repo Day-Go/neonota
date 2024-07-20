@@ -1,3 +1,4 @@
+from queue import Queue
 from openai import OpenAI
 from database_client import DbClient
 
@@ -17,7 +18,6 @@ class LLM:
             ]
         )
 
-        print(completion.choices[0].message)
         return str(completion.choices[0].message)
 
     def embed(self, input: str) -> list[float]:
