@@ -1,100 +1,62 @@
-import os
-import yaml
-import numpy as np
-from openai import OpenAI
-from sqlalchemy import create_engine
-from sqlalchemy.orm import sessionmaker
+import cmd
+import time
+import queue
+import threading
 
-from models import Note
+class NoteCLI(cmd.Cmd):
+    prompt = 'note> '
 
-with open('config.yaml', 'r') as f:
-    config = yaml.safe_load(f)
+    def __init__(self, db_client, llm, message_queue):
+        super().__init__()
+        self.db_client = db_client
+        self.llm = llm
+        self.message_queue = message_queue
+        self.should_run = True
+        self.prompt_delay = 0.5
 
-# Database setup
-user = config['postgres']['user']
-password = config['postgres']['password']
-host = config['postgres']['host']
-database = config['postgres']['database']
+    def do_exit(self, arg):
+        """Exit the CLI"""
+        print("Exiting...")
+        self.should_run = False
+        return True
 
-engine = create_engine(f'postgresql://{user}:{password}@{host}/{database}')
-Session = sessionmaker(bind=engine)
-session = Session()
+    def cmdloop(self, intro=None):
+        print(intro)
+        while self.should_run:
+            try:
+                super().cmdloop(intro='')
+                break
+            except KeyboardInterrupt:
+                print("^C")
 
-# OpenAI setup
-client = OpenAI(api_key=os.environ.get("OPENAI_API_KEY"))
+    def preloop(self):
+        self.check_messages_thread = threading.Thread(target=self.check_messages)
+        self.check_messages_thread.daemon = True
+        self.check_messages_thread.start()
 
-def get_embedding(text):
-    try:
-        response = client.embeddings.create(
-            model="text-embedding-3-small",
-            input=text
-        )
-        return response.data[0].embedding
-    except Exception as e:
-        print(f"Error getting embedding: {str(e)}")
-        return None
+    def check_messages(self):
+        while self.should_run:
+            messages = []
 
-def cosine_similarity(a, b):
-    return np.dot(a, b) / (np.linalg.norm(a) * np.linalg.norm(b))
+            # Collect all available messages
+            while True:
+                try:
+                    message = self.message_queue.get_nowait()
+                    messages.append(message)
+                except queue.Empty:
+                    break
 
-def similarity_search(query_text, top_k=3):
-    query_embedding = get_embedding(query_text)
-    if query_embedding is None:
-        return []
+            # Print collected messages
+            if messages:
+                print()
+                for message in messages:
+                    print(f"{message}")
 
-    query_embedding_array = np.array(query_embedding)
-    notes_with_embeddings = session.query(Note).filter(Note.embedding != None).all()
+                # Delay before showing the prompt
+                time.sleep(self.prompt_delay)
+                print(self.prompt, end='', flush=True)
 
-    similarities = []
-    for note in notes_with_embeddings:
-        note_embedding = np.array(note.embedding)
-        similarity = cosine_similarity(query_embedding_array, note_embedding)
-        similarities.append((note, similarity))
+            # Short sleep to prevent busy-waiting
+            time.sleep(0.1)
 
-    similarities.sort(key=lambda x: x[1], reverse=True)
-    return similarities[:top_k]
 
-def get_relevant_context(query):
-    results = similarity_search(query)
-    context = ""
-    for note, similarity in results:
-        context += f"Title: {note.title}\nContent: {note.content}\n\n"
-    return context.strip()
-
-def chat_with_gpt(messages):
-    try:
-        response = client.chat.completions.create(
-            model="gpt-4",
-            messages=messages
-        )
-        return response.choices[0].message.content
-    except Exception as e:
-        print(f"Error in chat completion: {str(e)}")
-        return None
-
-def main():
-    print("Welcome to the RAG-powered CLI tool. Type 'exit' to quit.")
-
-    conversation_history = [
-        {"role": "system", "content": "You are a helpful assistant with access to a knowledge base. Use the provided context to answer questions, but also use your general knowledge when appropriate. If the answer isn't in the context, say so. All following queries come from a user whom you must address directly."}
-    ]
-
-    while True:
-        user_input = input("\nYou: ")
-        if user_input.lower() == 'exit':
-            break
-
-        context = get_relevant_context(user_input)
-        conversation_history.append({"role": "user", "content": f"Context: {context}\n\nQuestion: {user_input}"})
-        response = chat_with_gpt(conversation_history)
-
-        if response:
-            print(f"\nAssistant: {response}")
-            conversation_history.append({"role": "assistant", "content": response})
-        else:
-            print("\nAssistant: I'm sorry, I encountered an error. Please try again.")
-
-    print("Closing assistant")
-
-if __name__ == "__main__":
-    main()
