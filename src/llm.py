@@ -1,0 +1,29 @@
+from openai import OpenAI
+from database_client import DbClient
+
+class LLM:
+    def __init__(self, chat_model: str, embed_model: str, db_client: DbClient):
+        self.chat_model = chat_model
+        self.embed_model = embed_model
+        self.db_client = db_client
+        self.llm_client = OpenAI()
+
+    def chat(self, input: str) -> str:
+        completion = self.llm_client.chat.completions.create(
+            model = self.chat_model,
+            messages = [
+                {"role": "system", "content": ""},
+                {"role": "user", "content": input}
+            ]
+        )
+
+        print(completion.choices[0].message)
+        return str(completion.choices[0].message)
+
+    def embed(self, input: str) -> list[float]:
+        print(input)
+        response = self.llm_client.embeddings.create(
+            model=self.embed_model,
+            input=input
+        )
+        return response.data[0].embedding

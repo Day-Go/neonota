@@ -1,5 +1,7 @@
+from typing import Union
 from sqlalchemy import create_engine, select 
-from sqlalchemy.orm import sessionmaker
+from sqlalchemy.orm import sessionmaker, class_mapper
+from sqlalchemy.dialects.postgresql import insert
 from models import Note, Tag, note_links, note_tags
 from contextlib import contextmanager
 
@@ -21,6 +23,14 @@ class DbClient:
         finally:
             session.close()
 
+    def get_note_by_path(self, path: str) -> Union[Note, None]:
+        with self.session_scope() as session:
+            stmt = select(Note).where(Note.path == path)
+            result = session.execute(stmt).scalar_one_or_none()
+            if result:
+                return session.expunge(result)
+            return None
+
     def get_all_notes(self):
         with self.session_scope() as session:
             return list(session.query(Note).all())
@@ -33,10 +43,27 @@ class DbClient:
         with self.session_scope() as session:
             return list(session.scalars(select(Note.path)).all())
 
-    # TODO: Add error handling
-    def add_note(self, note: Note):
+    def upsert_note(self, note: Note):
         with self.session_scope() as session:
-            session.add(note)
+            try:
+                # Check if a note with this path already exists
+                existing_note = session.query(Note).filter(Note.path == note.path).first()
+
+                if existing_note:
+                    # Update existing note
+                    for key, value in note.__dict__.items():
+                        if key != '_sa_instance_state':
+                            setattr(existing_note, key, value)
+                else:
+                    # Add new note
+                    session.add(note)
+
+                session.commit()
+                return note
+            except Exception as e:
+                session.rollback()
+                print(f"Error in upsert_note: {str(e)}")
+                raise
 
     def get_notes_by_tag(self, tag_name):
         with self.session_scope() as session:

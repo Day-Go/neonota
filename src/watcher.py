@@ -1,20 +1,15 @@
 import time
-import yaml
 from pathlib import Path
 from watchdog.observers import Observer
-from watchdog.events import (
-    FileSystemEventHandler, 
-    FileSystemEvent, 
-    FileCreatedEvent, 
-    FileMovedEvent, 
-    FileModifiedEvent
-)
+from watchdog.events import FileSystemEventHandler, FileSystemEvent 
+from llm import LLM
 from models import Note, Tag, note_tags, note_links
 from database_client import DbClient
 
 class NoteHandler(FileSystemEventHandler):
-    def __init__(self, db_client: DbClient):
+    def __init__(self, db_client: DbClient, llm_client: LLM):
         self.db_client = db_client
+        self.llm_client = llm_client
         self.last_modified = {}
         self.debounce_seconds = 1
         self.src_type = {
@@ -24,6 +19,16 @@ class NoteHandler(FileSystemEventHandler):
         self.existing_titles = self.db_client.get_all_titles()
         self.existing_files = self.db_client.get_all_filepaths()
         print(self.existing_files)
+
+    @staticmethod
+    def get_file_info(path):
+        stat_info = path.stat()
+
+        return {
+            'creation_time': stat_info.st_ctime,
+            'last_accessed': stat_info.st_atime,
+            'file_size': stat_info.st_size
+        }
 
     def is_valid_md_file(self, path: Path) -> bool:
         return path.is_file() and path.name.endswith('.md') and not path.name.endswith('~')
@@ -42,17 +47,34 @@ class NoteHandler(FileSystemEventHandler):
         return str(path) in self.existing_files
 
     def handle_existing_note(self, path: Path, event_type: str):
+        if time.time() - self.get_file_info(path)['creation_time'] < self.debounce_seconds:
+            return
+        note = self.db_client.get_note_by_path(str(path))
+        if note is None:
+            note = Note(path=str(path))
         print(f"Handling existing note: {path}")
         print(f"Event type: {event_type}\n")
+        with open(path, 'r') as f:
+            content = f.read()
+        embedding = self.llm_client.embed(content)
+        note.title = path.name
+        note.content = content
+        note.embedding = embedding
+        self.db_client.upsert_note(note)
+
 
     def handle_new_note(self, path: Path, event_type: str):
         print(f"Handling new note: {path}")
         print(f"Event type: {event_type}\n")
+
         with open(path, 'r') as f:
-            content = f.readlines()
-        note = Note(path=str(path), title=path.name, content=content)
-        self.db_client.add_note(note)
-        self.existing_files.append(path)
+            content = f.read()
+
+        embedding = self.llm_client.embed(content)
+        note = Note(path=str(path), title=path.name, content=content, embedding=embedding)
+
+        self.db_client.upsert_note(note)
+        self.existing_files.append(str(path))
         print(self.existing_files)
 
     def on_any_event(self, event: FileSystemEvent) -> None:
@@ -80,18 +102,4 @@ class Watcher:
 
     def on_modified(self):
         pass
-
-if __name__ == '__main__':
-    with open('config.yaml', 'r') as f:
-        config = yaml.safe_load(f)
-
-    user = config['postgres']['user']
-    password = config['postgres']['password']
-    host = config['postgres']['host']
-    database = config['postgres']['database']
-
-    db_client = DbClient(host, database, user, password)
-    event_handler = NoteHandler(db_client)
-    w = Watcher(event_handler)
-
 
