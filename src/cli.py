@@ -1,6 +1,8 @@
+import re
 import cmd
 import time
 import queue
+import readline
 import threading
 
 class NoteCLI(cmd.Cmd):
@@ -13,6 +15,10 @@ class NoteCLI(cmd.Cmd):
         self.message_queue = message_queue
         self.should_run = True
         self.prompt_delay = 0.5
+
+        readline.set_completer(self.complete_note_name)
+        readline.parse_and_bind("tab: complete")
+        #readline.set_completer_delims(' \t\n')
 
     def do_exit(self, arg):
         """Exit the CLI"""
@@ -31,23 +37,29 @@ class NoteCLI(cmd.Cmd):
 
     def do_link(self, arg):
         try:
-            args = arg.split()
+            args = re.findall(r'(?:"[^"]*"|[^"\s]+)', arg)
 
             if len(args) != 2:
                 self.message_queue.put('Usage: link <string> <integer>')
                 return
 
-            name = args[0]
+            name = args[0].strip('"')
             n = int(args[1])
 
+            if not name.endswith('.md'):
+                name += '.md'
+
             note = self.db_client.get_note_by_name(name)
+            print(note)
+            self.message_queue.put(note)
             if not note:
                 self.message_queue.put(f'Note named {name} not found.')
 
             similar_notes = self.db_client.get_similar_notes(note.embedding, n)
             for similar_note in similar_notes:
                 self.message_queue.put(similar_note.name)
-        except:
+
+        except ValueError:
             self.message_queue.put('Usage: link <string> <integer>')
 
     def help_link(self):
@@ -93,3 +105,28 @@ class NoteCLI(cmd.Cmd):
             time.sleep(0.1)
 
 
+    def get_note_names(self):
+        return [str(note).rstrip('.md') for note in self.db_client.get_all_names()]
+
+    def complete(self, text, state):
+        line = readline.get_line_buffer().split()
+
+        # If we're at the start of the line, complete commands
+        if not line:
+            return [c + ' ' for c in self.get_names() if c.startswith(text)][state]
+
+        # If we're completing arguments for a command
+        cmd = line[0]
+        if cmd == 'link':
+            if len(line) == 2:  # completing the note name
+                return self.complete_note_name(text, state)
+
+        return None
+
+    def complete_note_name(self, text, state):
+        names = self.get_note_names()
+        matches = [n for n in names if n.startswith(text)]
+        if state < len(matches):
+            return f'"{matches[state]}"'
+        else:
+            return None

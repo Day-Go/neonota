@@ -1,9 +1,15 @@
+import numpy as np
 from typing import List, Union
 from sqlalchemy import create_engine, func, select 
 from sqlalchemy.orm import sessionmaker, class_mapper
 from sqlalchemy.dialects.postgresql import insert
+from sqlalchemy.sql.expression import cast
+from sqlalchemy.types import Float, ARRAY
 from models import Note, Tag, note_links, note_tags
 from contextlib import contextmanager
+
+def cosine_similarity(a, b):
+    return np.dot(a, b) / (np.linalg.norm(a) * np.linalg.norm(b))
 
 class DbClient:
     def __init__(self, host: str, database: str, user: str, password: str):
@@ -38,7 +44,10 @@ class DbClient:
             stmt = select(Note).where(Note.name == name)
             result = session.execute(stmt).scalar_one_or_none()
             if result:
-                return session.expunge(result)
+                # Make a copy of the note's data before expunging
+                note_copy = Note(name=result.name, content=result.content, embedding=result.embedding)
+                session.expunge(result)
+                return note_copy
             return None
 
     def get_all_notes(self):
@@ -90,11 +99,13 @@ class DbClient:
 
     def get_similar_notes(self, query_embedding: List[float], n: int = 5):
         with self.session_scope() as session:
-            # Assuming your Note model has an 'embedding' column of type vector
-            results = session.query(Note).order_by(
-                func.cosine_similarity(Note.embedding, query_embedding).desc()
-            ).limit(n).all()
+            results = session.scalars(select(Note).order_by(
+                Note.embedding.l2_distance(query_embedding)
+            ).limit(n)).all()
+            for result in results:
+                session.expunge(result)
             return results
+
 
     def bulk_add_embeddings(self, note_ids: List[int], embeddings: List[List[float]]):
         with self.session_scope() as session:

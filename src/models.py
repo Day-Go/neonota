@@ -47,7 +47,7 @@ class Note(Base):
     tags = relationship("Tag", secondary=note_tags, back_populates="notes")
 
     def __repr__(self):
-        return f"<Note(title='{self.title}', tags={[tag.name for tag in self.tags]})>"
+        return f"<Note(name='{self.name}', tags={[tag.name for tag in self.tags]})>"
 
 # Add back-reference to Note in Tag
 Tag.notes = relationship("Note", secondary=note_tags, back_populates="tags")
