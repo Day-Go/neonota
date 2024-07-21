@@ -9,16 +9,16 @@ class LLM:
         self.db_client = db_client
         self.llm_client = OpenAI()
 
-    def chat(self, input: str) -> str:
+    def chat(self, system_prompt: str, user_prompt: str) -> str:
         completion = self.llm_client.chat.completions.create(
             model = self.chat_model,
             messages = [
-                {"role": "system", "content": ""},
-                {"role": "user", "content": input}
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": user_prompt}
             ]
         )
 
-        return str(completion.choices[0].message)
+        return str(completion.choices[0].message.content)
 
     def embed(self, input: str) -> list[float]:
         print(input)

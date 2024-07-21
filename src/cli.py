@@ -67,11 +67,14 @@ class NoteCLI(cmd.Cmd):
         if len(args) != 1:
             print('Usage: open <string>')
             return
+
         name = args[0].strip('"')
-
         note = self.db_client.get_note_by_name(name)
-        path = Path(note.path)
+        if not note:
+            print('Could not retrieve note: {name}')
+            return
 
+        path = Path(note.path)
         if not path.exists():
             print(f"File not found: {path}")
             return
@@ -84,6 +87,43 @@ class NoteCLI(cmd.Cmd):
 
     def help_open(self):
         print("Open a specified markdown file in Neovim in a new terminal pane")
+
+    def do_crit(self, arg):
+        args = re.findall(r'(?:"[^"]*"|[^"\s]+)', arg)
+        if len(args) != 1:
+            print('Usage: crit <string>')
+            return
+
+        name = args[0].strip('"')
+        note = self.db_client.get_note_by_name(name)
+        if not note:
+            print('Could not retrieve note: {name}')
+            return
+
+        path = Path(note.path)
+        if not path.exists():
+            print('File not found: {path}')
+
+        system_prompt = ('You are an expert on whatever topic you are presented. '
+                         'Your task is to evaluate the correctness of information presented to you. '
+                         'Be as critical as possible. Your response should outline information you '
+                         'believe is correct, the information that is incorrect, and suggestions on how '
+                         'to improve the correctness of the text.')
+        result = self.llm.chat(system_prompt, note.content)
+        print(str(result))
+        llm_note = path.with_stem(f'{path.name}_llm')
+        with open(llm_note, 'w') as f:
+            f.write(str(result))
+
+        try:
+            subprocess.run(['nvim', llm_note], check=True)
+            print(f"Opened {path} in a new terminal pane.")
+        except subprocess.CalledProcessError as e:
+            print(f"Error opening file: {e}")
+
+
+    def help_crit(self, arg):
+        print('Get an LLMs critical opinion on your note')
 
     def cmdloop(self, intro=None):
         print(intro)
@@ -137,7 +177,7 @@ class NoteCLI(cmd.Cmd):
 
         # If we're completing arguments for a command
         cmd = line[0]
-        if cmd == 'link' or cmd == 'open':
+        if cmd == 'link' or cmd == 'open' or cmd == 'crit':
             if len(line) == 2:  # completing the note name
                 return self.complete_note_name(text, state)
 
