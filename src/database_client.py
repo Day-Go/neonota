@@ -45,7 +45,12 @@ class DbClient:
             result = session.execute(stmt).scalar_one_or_none()
             if result:
                 # Make a copy of the note's data before expunging
-                note_copy = Note(name=result.name, content=result.content, embedding=result.embedding)
+                note_copy = Note(
+                    name=result.name, 
+                    path=result.path, 
+                    content=result.content, 
+                    embedding=result.embedding
+                )
                 session.expunge(result)
                 return note_copy
             return None

@@ -1,9 +1,11 @@
 import re
 import cmd
+from pathlib import Path
 import time
 import queue
 import readline
 import threading
+import subprocess
 
 class NoteCLI(cmd.Cmd):
     prompt = 'note> '
@@ -18,7 +20,7 @@ class NoteCLI(cmd.Cmd):
 
         readline.set_completer(self.complete_note_name)
         readline.parse_and_bind("tab: complete")
-        #readline.set_completer_delims(' \t\n')
+        readline.set_completer_delims(' \t\n')
 
     def do_exit(self, arg):
         """Exit the CLI"""
@@ -30,40 +32,58 @@ class NoteCLI(cmd.Cmd):
     def do_list_notes(self, arg):
         notes = self.db_client.get_all_names()
         for note in notes:
-            self.message_queue.put(note)
+            print(note)
 
     def help_list_notes(self):
-        self.message_queue.put('Get a list of all the note names in the database')
+        print('Get a list of all the note names in the database')
 
     def do_link(self, arg):
         try:
             args = re.findall(r'(?:"[^"]*"|[^"\s]+)', arg)
 
             if len(args) != 2:
-                self.message_queue.put('Usage: link <string> <integer>')
+                print('Usage: link <string> <integer>')
                 return
 
             name = args[0].strip('"')
             n = int(args[1])
 
-            if not name.endswith('.md'):
-                name += '.md'
-
             note = self.db_client.get_note_by_name(name)
-            print(note)
-            self.message_queue.put(note)
             if not note:
-                self.message_queue.put(f'Note named {name} not found.')
+                print(f'Note named {name} not found.')
 
             similar_notes = self.db_client.get_similar_notes(note.embedding, n)
             for similar_note in similar_notes:
-                self.message_queue.put(similar_note.name)
+                print(similar_note.name)
 
         except ValueError:
-            self.message_queue.put('Usage: link <string> <integer>')
+            print('Usage: link <string> <integer>')
 
     def help_link(self):
         print('find x most similar notes')
+
+    def do_open(self, arg):
+        args = re.findall(r'(?:"[^"]*"|[^"\s]+)', arg)
+        if len(args) != 1:
+            print('Usage: open <string>')
+            return
+        name = args[0].strip('"')
+
+        note = self.db_client.get_note_by_name(name)
+        path = Path(note.path)
+
+        if not path.exists():
+            print(f"File not found: {path}")
+            return
+
+        try:
+            subprocess.run(['nvim', path], check=True)
+            print(f"Opened {path} in a new terminal pane.")
+        except subprocess.CalledProcessError as e:
+            print(f"Error opening file: {e}")
+
+    def help_open(self):
+        print("Open a specified markdown file in Neovim in a new terminal pane")
 
     def cmdloop(self, intro=None):
         print(intro)
@@ -91,7 +111,7 @@ class NoteCLI(cmd.Cmd):
                 except queue.Empty:
                     break
 
-            # Print collected messages
+            # print collected messages
             if messages:
                 print()
                 for message in messages:
@@ -117,7 +137,7 @@ class NoteCLI(cmd.Cmd):
 
         # If we're completing arguments for a command
         cmd = line[0]
-        if cmd == 'link':
+        if cmd == 'link' or cmd == 'open':
             if len(line) == 2:  # completing the note name
                 return self.complete_note_name(text, state)
 

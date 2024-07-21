@@ -58,6 +58,7 @@ class NoteHandler(FileSystemEventHandler):
         with open(path, 'r') as f:
             content = f.read()
         embedding = self.llm_client.embed(content)
+        # TODO: Strip file extension from name and add it to extension column
         note.name = path.name
         note.content = content
         note.embedding = embedding
@@ -73,7 +74,7 @@ class NoteHandler(FileSystemEventHandler):
 
         embedding = self.llm_client.embed(content)
         note = Note(path=str(path), name=path.name, content=content, embedding=embedding)
-
+        # TODO: Strip file extension from name and add it to extension column
         self.db_client.upsert_note(note)
         self.existing_files.append(str(path))
 
