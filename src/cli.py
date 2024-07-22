@@ -111,7 +111,7 @@ class NoteCLI(cmd.Cmd):
                          'to improve the correctness of the text.')
         result = self.llm.chat(system_prompt, note.content)
         print(str(result))
-        llm_note = path.with_stem(f'{path.name}_llm')
+        llm_note = path.with_stem(f'{path.stem}.llm')
         with open(llm_note, 'w') as f:
             f.write(str(result))
 
@@ -121,9 +121,54 @@ class NoteCLI(cmd.Cmd):
         except subprocess.CalledProcessError as e:
             print(f"Error opening file: {e}")
 
-
     def help_crit(self, arg):
         print('Get an LLMs critical opinion on your note')
+
+    def do_crit_diff(self, arg):
+        args = re.findall(r'(?:"[^"]*"|[^"\s]+)', arg)
+        if len(args) != 1:
+            print('Usage: crit <string>')
+            return
+
+        name = args[0].strip('"')
+        note = self.db_client.get_note_by_name(name)
+        if not note:
+            print('Could not retrieve note: {name}')
+            return
+
+        path = Path(note.path)
+        if not path.exists():
+            print('File not found: {path}')
+
+        system_prompt = ('You are an expert on whatever topic you are presented. '
+                         'Your task is to evaluate the correctness of information presented to you. '
+                         'Be as critical as possible. Consider which information is correct, '
+                         'which is not correct, and what changes need to be made to fix the information. '
+                         'Focus on the information presented rather than grammar, punctuation and wording. '
+                         'Return an improved version of the original note while remaining as close '
+                         'as possible to the style and structure of the original.')
+        result = self.llm.chat(system_prompt, note.content)
+        print(str(result))
+        llm_note = path.with_stem(f'{path.stem}.llm_diff')
+        with open(llm_note, 'w') as f:
+            f.write(str(result))
+
+        try:
+            subprocess.run(['nvim', '-d', note.path, llm_note], check=True)
+            print(f"Opened {path} in a new terminal pane.")
+        except subprocess.CalledProcessError as e:
+            print(f"Error opening file: {e}")
+
+    def help_crit_diff(self):
+        print('Get an LLMs critical opinion on your note and return a corrected version in neovims diff view')
+
+    def do_ask(self, arg):
+        question = ' '.join(arg.split(' '))
+        result = self.llm.chat('', question)
+        print(str(result))
+
+    def help_ask(self):
+        print("Ask the LLM a question without injecting any context")
 
     def cmdloop(self, intro=None):
         print(intro)
@@ -173,11 +218,12 @@ class NoteCLI(cmd.Cmd):
 
         # If we're at the start of the line, complete commands
         if not line:
-            return [c + ' ' for c in self.get_names() if c.startswith(text)][state]
+            return [c[3:] + ' ' for c in self.get_names() if c.startswith(f'do_{text}')][state]
 
         # If we're completing arguments for a command
         cmd = line[0]
-        if cmd == 'link' or cmd == 'open' or cmd == 'crit':
+        cmds = ['link', 'open', 'crit', 'crit_diff']
+        if cmd in cmds: 
             if len(line) == 2:  # completing the note name
                 return self.complete_note_name(text, state)
 

@@ -38,7 +38,6 @@ class NoteHandler(FileSystemEventHandler):
         key = f'{event_type}_{path.name}'
         if key in self.last_modified:
             if time.time() - self.last_modified[key] < self.debounce_seconds:
-                self.message_queue.put('Debounced..\n')
                 return True
 
         self.last_modified[key] = time.time()
