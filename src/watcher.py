@@ -88,8 +88,8 @@ class NoteHandler(FileSystemEventHandler):
             self.handle_new_note(path, event.event_type)
 
 class Watcher:
-    def __init__(self, event_handler: FileSystemEventHandler):
-        path = Path('C:/LiberVulgaris/LiberVulgaris')
+    def __init__(self, event_handler: FileSystemEventHandler, root_dir: str):
+        path = Path(root_dir)
         self.observer = Observer()
         self.observer.schedule(event_handler, path, recursive=True)
 

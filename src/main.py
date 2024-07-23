@@ -7,14 +7,15 @@ from database_client import DbClient
 from watcher import Watcher, NoteHandler
 
 
-def run_watcher(event_handler):
-    watcher = Watcher(event_handler)
+def run_watcher(event_handler: NoteHandler, root_dir: str):
+    watcher = Watcher(event_handler, root_dir)
     watcher.run()
 
 if __name__ == '__main__':
     with open('config.yaml', 'r') as f:
         config = yaml.safe_load(f)
 
+    root_dir = config['dir']['root']
     user = config['postgres']['user']
     password = config['postgres']['password']
     host = config['postgres']['host']
@@ -29,7 +30,7 @@ if __name__ == '__main__':
     event_handler = NoteHandler(db_client, llm, message_queue)
 
     # Start the watcher in a separate thread
-    watcher_thread = threading.Thread(target=run_watcher, args=(event_handler,))
+    watcher_thread = threading.Thread(target=run_watcher, args=(event_handler, root_dir,))
     watcher_thread.daemon = True
     watcher_thread.start()
 

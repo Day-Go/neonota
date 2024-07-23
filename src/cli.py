@@ -2,6 +2,7 @@ import re
 import cmd
 from pathlib import Path
 import time
+import yaml
 import queue
 import readline
 import threading
@@ -170,6 +171,38 @@ class NoteCLI(cmd.Cmd):
     def help_ask(self):
         print("Ask the LLM a question without injecting any context")
 
+    def do_set_root(self, arg):
+        if len(arg.split(' ')) != 1:
+            print('Usage: set_root <string>')
+            return 
+
+        if not Path(arg).is_dir():
+            print('Directory not found!')
+            return
+
+        with open('config.yaml', 'r') as file:
+            config = yaml.safe_load(file)
+
+        config['dir']['root'] = arg 
+
+        with open('config.yaml', 'w') as file:
+            yaml.dump(config, file, default_flow_style=False)
+
+    def help_set_root(self):
+        print('Set the note root folder')
+
+    def do_new(self, args):
+        NotImplemented()
+
+    def help_new(self):
+        print('Create a new markdown directory in the root folder')
+
+    def do_add_tags(self, args):
+        NotImplemented()
+
+    def help_add_tags(self):
+        print('Use llm to add tags to the note. The llm will check if a relevant tag exists in the db first')
+
     def cmdloop(self, intro=None):
         print(intro)
         while self.should_run:
@@ -217,15 +250,19 @@ class NoteCLI(cmd.Cmd):
         line = readline.get_line_buffer().split()
 
         # If we're at the start of the line, complete commands
-        if not line:
+        if len(line) <= 1:
             return [c[3:] + ' ' for c in self.get_names() if c.startswith(f'do_{text}')][state]
 
         # If we're completing arguments for a command
         cmd = line[0]
         cmds = ['link', 'open', 'crit', 'crit_diff']
         if cmd in cmds: 
-            if len(line) == 2:  # completing the note name
+            if len(line) == 2:
                 return self.complete_note_name(text, state)
+
+        if cmd == 'set_root':
+            if len(line) == 2:
+                return self.complete_path(text, state)
 
         return None
 
@@ -236,3 +273,22 @@ class NoteCLI(cmd.Cmd):
             return f'"{matches[state]}"'
         else:
             return None
+
+    def complete_path(self, text, state):
+        # Expand user directory if path starts with ~
+        text = Path(text).expanduser()
+
+        if text == Path('.'):
+            # If no text, suggest current directory contents
+            completions = list(Path('.').iterdir())
+        elif text.is_dir():
+            # If text is a directory, suggest its contents
+            completions = list(text.iterdir())
+        else:
+            # If text is a partial path, suggest matching directories
+            parent = text.parent
+            completions = [p for p in parent.iterdir() if p.is_dir() and p.name.startswith(text.name)]
+
+        # Sort completions and add trailing slash to directories
+        completions = sorted(str(p) + ('/' if p.is_dir() else '') for p in completions)
+        return completions[state] if state < len(completions) else None
