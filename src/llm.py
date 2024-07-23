@@ -27,3 +27,12 @@ class LLM:
             input=input
         )
         return response.data[0].embedding
+
+    def dream(self, input: str) -> str:
+        response = self.llm_client.images.generate(
+          prompt=input,
+          n=1,
+          size="1024x1024"
+        )
+        print(response)
+        return response.url

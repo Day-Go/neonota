@@ -25,6 +25,9 @@ class NoteCLI(cmd.Cmd):
 
     def do_exit(self, arg):
         """Exit the CLI"""
+        self.exit()
+
+    def exit(self):
         print("Exiting...")
         self.should_run = False
         return True
@@ -191,17 +194,24 @@ class NoteCLI(cmd.Cmd):
     def help_set_root(self):
         print('Set the note root folder')
 
-    def do_new(self, args):
+    def do_new(self, arg):
         NotImplemented()
 
     def help_new(self):
         print('Create a new markdown directory in the root folder')
 
-    def do_add_tags(self, args):
+    def do_add_tags(self, arg):
         NotImplemented()
 
     def help_add_tags(self):
         print('Use llm to add tags to the note. The llm will check if a relevant tag exists in the db first')
+
+    def do_dream(self, arg):
+        desc = ' '.join(arg.split(' '))
+        self.llm.dream(desc)
+
+    def help_dream(self):
+        print('Generate an image from a description')
 
     def cmdloop(self, intro=None):
         print(intro)
@@ -211,6 +221,7 @@ class NoteCLI(cmd.Cmd):
                 break
             except KeyboardInterrupt:
                 print("^C")
+                self.exit()
 
     def preloop(self):
         self.check_messages_thread = threading.Thread(target=self.check_messages)
